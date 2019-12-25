@@ -54,7 +54,7 @@ func getStockSymbols(industry string, page int, wg *sync.WaitGroup) {
  	wg.Done()
 }
 
- func main() {
+func main() {
  	mainStart := time.Now()
 	
 	defer func() {
@@ -62,7 +62,11 @@ func getStockSymbols(industry string, page int, wg *sync.WaitGroup) {
 		fmt.Printf("\nTotal time: %s\n", mainElapsed)
 	}()
 
- 	pages := []int{0, 50, 100, 150, 200}
+ 	pages := []int{}
+ 	for i := 0; i <= 200; i += 50 {
+ 		pages = append(pages, i)
+ 	}
+
  	var wg sync.WaitGroup
  	wg.Add(len(pages))
 
@@ -71,52 +75,4 @@ func getStockSymbols(industry string, page int, wg *sync.WaitGroup) {
  	}
 
  	wg.Wait()
- 	// start := time.Now()
- 	// Symbols := []StockSymbol{}
- 	// page := 0
- 	// urlToRead := fmt.Sprintf(Url, Agriculture, page)
- 	// resp, err := http.Get(urlToRead)
- 	// if err != nil {
- 	// 	fmt.Printf("Could  not read url: %s with error: %v\n", urlToRead, err)
- 	// }
- 	//  b, err := ioutil.ReadAll(resp.Body)
- 	// if err != nil {
- 	// 	fmt.Printf("Could not read as bytes: %v\n", err)
- 	// }
- 	// re := regexp.MustCompile(Pattern)
- 	// results := re.FindAll(b, -1)
-
- 	// for len(results) > 0 {
- 	// 	for _, res := range results {
-	 // 		s := fmt.Sprintf("%s", res)
-	 // 		i := strings.Index(s, ">") + 1
-	 // 		j := strings.Index(s, "</td>")
-	 // 		x := strings.Index(s, "<div>") + 5
-	 // 		y := strings.Index(s, "</div>")
-	 // 		Symbols = append(Symbols,StockSymbol{Code: s[i:j], Description: s[x:y]})
- 	// 	}
-
- 	// 	page += 50
- 	// 	urlToRead = fmt.Sprintf(Url, Agriculture, page)
- 	// 	// fmt.Println(urlToRead)
- 	// 	resp, err = http.Get(urlToRead)
- 	// 	if err != nil {
- 	// 		fmt.Printf("Could  not read url: %s with error: %v\n", urlToRead, err)
- 	// 	}
-
- 	// 	b, err := ioutil.ReadAll(resp.Body)
- 	// 	if err != nil {
- 	// 		fmt.Printf("Could not read as bytes: %v\n", err)
- 	// 	}
- 	// 	results = re.FindAll(b, -1)
- 	// 	// fmt.Println(resp.Status)
- 	// }
- 	// resp.Body.Close()
- 	// data, err := json.Marshal(Symbols)
- 	// if err != nil {
- 	// 	fmt.Println("Could not marshal struct to JSON")
- 	// }
- 	// elapsed := time.Since(start)
- 	// fmt.Printf("Number of symbols %d too total of: %s \n", len(data), elapsed)
-
  }
