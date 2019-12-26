@@ -19,7 +19,8 @@ type StockSymbol struct{
  const (
  	Url string = "http://bigcharts.marketwatch.com/industry/bigcharts-com/stocklist.asp?Symb=%s&startingIndex=%d"
  	Pattern string = "<td class=\"symb-col\">[A-Za-z0-9.]*</td>\\s*<td class=\"name-col\"><div>.*</div>"
- 	Agriculture string = "WSJMXUSAGRI"
+ 	// Agriculture string = "WSJMXUSAGRI"
+ 	FinancialServices string = "WSJMXUSFCL"
  )
 
 func getStockSymbols(industry string, page int, wg *sync.WaitGroup) {
@@ -50,7 +51,7 @@ func getStockSymbols(industry string, page int, wg *sync.WaitGroup) {
  		fmt.Println("Could not marshal struct to JSON")
  	}
  	elapsed := time.Since(start)
- 	fmt.Printf("Number of symbols %d time of: %s page: %d \n", len(data), elapsed, page)
+ 	fmt.Printf("Number of symbols %s time of: %s page: %d \n", data, elapsed, page)
  	wg.Done()
 }
 
@@ -63,7 +64,7 @@ func main() {
 	}()
 
  	pages := []int{}
- 	for i := 0; i <= 200; i += 50 {
+ 	for i := 0; i <= 4400; i += 50 {
  		pages = append(pages, i)
  	}
 
@@ -71,7 +72,7 @@ func main() {
  	wg.Add(len(pages))
 
  	for _, page := range pages {
- 		go getStockSymbols(Agriculture, page, &wg)
+ 		go getStockSymbols(FinancialServices, page, &wg)
  	}
 
  	wg.Wait()
