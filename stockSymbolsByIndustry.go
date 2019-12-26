@@ -38,21 +38,22 @@ func getStockSymbols(industry string, page int, wg *sync.WaitGroup) {
  	re := regexp.MustCompile(Pattern)
 	for _, res := range re.FindAll(b, -1) {
  		s := fmt.Sprintf("%s", res)
- 		i := strings.Index(s, ">") + 1
- 		j := strings.Index(s, "</td>")
- 		x := strings.Index(s, "<div>") + 5
- 		y := strings.Index(s, "</div>")
+ 		i, j := strings.Index(s, ">") + 1, strings.Index(s, "</td>")
+ 		x, y := strings.Index(s, "<div>") + 5, strings.Index(s, "</div>")
  		Symbols = append(Symbols,StockSymbol{Code: s[i:j], Description: s[x:y]})
 	}
-
  	resp.Body.Close()
+
  	data, err := json.Marshal(Symbols)
  	if err != nil {
  		fmt.Println("Could not marshal struct to JSON")
  	}
- 	elapsed := time.Since(start)
- 	fmt.Printf("Number of symbols %s time of: %s page: %d \n", data, elapsed, page)
- 	wg.Done()
+
+ 	defer func() {
+		elapsed := time.Since(start)
+ 		fmt.Printf("Number of symbols %d time of: %s page: %d \n", len(data), elapsed, page)
+ 		wg.Done()
+	}()
 }
 
 func main() {
