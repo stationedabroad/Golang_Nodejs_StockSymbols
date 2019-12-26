@@ -4,11 +4,16 @@ import (
 	"fmt"
 	"regexp"
 	"net/http"
-	"io/ioutil"
 	"strings"
+	"strconv"
 	"encoding/json"
 	"time"
 	"sync"
+	"math"
+	
+	"os"
+	"io/ioutil"
+	// "log"
 )
 
 type StockSymbol struct{
@@ -18,13 +23,108 @@ type StockSymbol struct{
 
  const (
  	Url string = "http://bigcharts.marketwatch.com/industry/bigcharts-com/stocklist.asp?Symb=%s&startingIndex=%d"
- 	Pattern string = "<td class=\"symb-col\">[A-Za-z0-9.]*</td>\\s*<td class=\"name-col\"><div>.*</div>"
+ 	StockPattern string = "<td class=\"symb-col\">[A-Za-z0-9.]*</td>\\s*<td class=\"name-col\"><div>.*</div>"
+ 	PagePattern string = "startingIndex=[0-9]*"
  	// Agriculture string = "WSJMXUSAGRI"
- 	FinancialServices string = "WSJMXUSFCL"
+ 	// FinancialServices string = "WSJMXUSFCL"
  )
 
-func getStockSymbols(industry string, page int, wg *sync.WaitGroup) {
+  var Industries = map[string]string{
+ 	// 	"Agricultre": "WSJMXUSAGRI",
+ 	// 	"Automotive": "WSJMXUSAUTO",
+ 	// 	"Basic Materials/Resources": "WSJMXUSBSC",
+ 	// 	"Business/Consumer Services": "WSJMXUSCYC",
+ 	// 	"Consumer Goods": "WSJMXUSNCY",
+ 	// 	"Energy": "WSJMXUSENE",
+ 		"Financial Services": "WSJMXUSFCL",
+ 		// "Health Care/Life Sciences": "WSJMXUSHCR",
+ 		// "Industrial Goods": "WSJMXUSIDU",
+ 		// "Leisure/Arts/Hospitality": "WSJMXUSLEAH",
+ 		// "Media/Entertainment": "WSJMXUSMENT",
+ 		// "Real Estate/Construction": "WSJMXUSRECN",
+ 		// "Retail/Wholesale": "WSJMXUSRTWS",
+ 		// "Technology": "WSJMXUSTEC",
+ 		// "Telecommunication Services": "WSJMXUSTEL",
+ 		// "Transportation/Logistics": "WSJMXUSTRSH",
+ 		// "Utilities": "WSJMXUSUTI",
+ 	}
+
+func getStockSymbolsByIndustry(industry string, wg *sync.WaitGroup) {
 	start := time.Now()
+	fmt.Printf("%s starting now ...\n", industry)
+	defer func() {
+		elapsed := time.Since(start)
+ 		fmt.Printf("Industry: %s finished in: %s\n", industry, elapsed)
+ 		wg.Done()
+	}()
+
+	// Decide the number of concurrent processes
+	urlMain := fmt.Sprintf(Url, industry, 0)
+	re := regexp.MustCompile(PagePattern)
+	resp, err := http.Get(urlMain)
+	if err != nil {
+		// error
+	}
+	b, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		//error
+	}
+	res := re.FindAll(b, -1)
+	/* Long expression, its just getting the last page number of the set of Industry Pages
+	from here we work backwards or forwards in the For loop depending if there is any content */
+	nPage, err := strconv.Atoi(strings.Split(string(res[len(res)-1]), "=")[1])
+	lastPage := int(math.Ceil(float64(nPage) / 50 / 2) * 50)
+	re = regexp.MustCompile(StockPattern)
+
+	oLastPage := lastPage
+	fmt.Println(lastPage)
+	run := true
+	counter := 0
+	for run {
+		counter++
+		url := fmt.Sprintf(Url, industry, oLastPage)
+		fmt.Printf("URL read : %s Truth value: %t\n", url, run)
+		resp, err := http.Get(url)
+		if err != nil {
+			
+		}
+		b, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			//error
+		}
+
+		res := re.FindAll(b, 1)
+		// The case where you have to go higher
+		if len(res) > 0 && oLastPage >= lastPage {
+			oLastPage += 50
+		} else if len(res) == 0 && oLastPage >= lastPage {
+			fmt.Println("A")
+			run = false
+		}
+		// The case where you have to go lower
+		if len(res) == 0 && oLastPage <= lastPage {
+			oLastPage -= 50
+		} else if len(res) > 0 && oLastPage <= lastPage {
+			fmt.Println("B")
+			run = false
+		}
+	}
+	fmt.Printf("Counter %d TRUE value: %t\n", counter, run)
+	concurrency := int(oLastPage / 50)
+	var wgI sync.WaitGroup
+	wgI.Add(concurrency)
+	fmt.Printf("Concurrency %s is %d\n", industry, concurrency)
+ 	for i := 0; i < concurrency; i++ {
+ 		pageNo := i * 50
+ 		fmt.Printf("go routine %s pages: %d\n", industry, pageNo)
+ 		go getStockSymbolsByPage(industry, pageNo, &wgI)
+ 	}
+
+	wgI.Wait()
+}
+
+func getStockSymbolsByPage(industry string, page int, wgI *sync.WaitGroup) {
+	// start := time.Now()
  	Symbols := []StockSymbol{}
  	urlToRead := fmt.Sprintf(Url, industry, page)
  	resp, err := http.Get(urlToRead)
@@ -35,7 +135,7 @@ func getStockSymbols(industry string, page int, wg *sync.WaitGroup) {
  	if err != nil {
  		fmt.Printf("Could not read as bytes: %v\n", err)
  	}
- 	re := regexp.MustCompile(Pattern)
+ 	re := regexp.MustCompile(StockPattern)
 	for _, res := range re.FindAll(b, -1) {
  		s := fmt.Sprintf("%s", res)
  		i, j := strings.Index(s, ">") + 1, strings.Index(s, "</td>")
@@ -48,12 +148,11 @@ func getStockSymbols(industry string, page int, wg *sync.WaitGroup) {
  	if err != nil {
  		fmt.Println("Could not marshal struct to JSON")
  	}
-
- 	defer func() {
-		elapsed := time.Since(start)
- 		fmt.Printf("Number of symbols %d time of: %s page: %d \n", len(data), elapsed, page)
- 		wg.Done()
-	}()
+ 	fileName := "/tmp/" + industry + "_" + strconv.Itoa(page) + ".json"
+ 	if err := ioutil.WriteFile(fileName, data, os.ModePerm); err != nil {
+ 		fmt.Printf("Error writing file: %s with error: %s\n", fileName, err)
+ 	}
+ 	defer wgI.Done()
 }
 
 func main() {
@@ -61,19 +160,14 @@ func main() {
 	
 	defer func() {
 		mainElapsed := time.Since(mainStart)
-		fmt.Printf("\nTotal time: %s\n", mainElapsed)
+		fmt.Printf("\nTotal time: %s for %d number of Industries\n", mainElapsed, len(Industries))
 	}()
 
- 	pages := []int{}
- 	for i := 0; i <= 4400; i += 50 {
- 		pages = append(pages, i)
- 	}
-
  	var wg sync.WaitGroup
- 	wg.Add(len(pages))
+ 	wg.Add(len(Industries))
 
- 	for _, page := range pages {
- 		go getStockSymbols(FinancialServices, page, &wg)
+ 	for _, industry := range Industries {
+ 		go getStockSymbolsByIndustry(industry, &wg)
  	}
 
  	wg.Wait()
