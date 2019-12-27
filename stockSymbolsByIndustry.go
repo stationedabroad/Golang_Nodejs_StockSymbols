@@ -30,23 +30,23 @@ type StockSymbol struct{
  )
 
   var Industries = map[string]string{
- 	// 	"Agricultre": "WSJMXUSAGRI",
- 	// 	"Automotive": "WSJMXUSAUTO",
- 	// 	"Basic Materials/Resources": "WSJMXUSBSC",
- 	// 	"Business/Consumer Services": "WSJMXUSCYC",
- 	// 	"Consumer Goods": "WSJMXUSNCY",
- 	// 	"Energy": "WSJMXUSENE",
+ 		"Agricultre": "WSJMXUSAGRI",
+ 		"Automotive": "WSJMXUSAUTO",
+ 		"Basic Materials/Resources": "WSJMXUSBSC",
+ 		"Business/Consumer Services": "WSJMXUSCYC",
+ 		"Consumer Goods": "WSJMXUSNCY",
+ 		"Energy": "WSJMXUSENE",
  		"Financial Services": "WSJMXUSFCL",
- 		// "Health Care/Life Sciences": "WSJMXUSHCR",
- 		// "Industrial Goods": "WSJMXUSIDU",
- 		// "Leisure/Arts/Hospitality": "WSJMXUSLEAH",
- 		// "Media/Entertainment": "WSJMXUSMENT",
- 		// "Real Estate/Construction": "WSJMXUSRECN",
- 		// "Retail/Wholesale": "WSJMXUSRTWS",
- 		// "Technology": "WSJMXUSTEC",
- 		// "Telecommunication Services": "WSJMXUSTEL",
- 		// "Transportation/Logistics": "WSJMXUSTRSH",
- 		// "Utilities": "WSJMXUSUTI",
+ 		"Health Care/Life Sciences": "WSJMXUSHCR",
+ 		"Industrial Goods": "WSJMXUSIDU",
+ 		"Leisure/Arts/Hospitality": "WSJMXUSLEAH",
+ 		"Media/Entertainment": "WSJMXUSMENT",
+ 		"Real Estate/Construction": "WSJMXUSRECN",
+ 		"Retail/Wholesale": "WSJMXUSRTWS",
+ 		"Technology": "WSJMXUSTEC",
+ 		"Telecommunication Services": "WSJMXUSTEL",
+ 		"Transportation/Logistics": "WSJMXUSTRSH",
+ 		"Utilities": "WSJMXUSUTI",
  	}
 
 func getStockSymbolsByIndustry(industry string, wg *sync.WaitGroup) {
@@ -72,18 +72,28 @@ func getStockSymbolsByIndustry(industry string, wg *sync.WaitGroup) {
 	res := re.FindAll(b, -1)
 	/* Long expression, its just getting the last page number of the set of Industry Pages
 	from here we work backwards or forwards in the For loop depending if there is any content */
-	nPage, err := strconv.Atoi(strings.Split(string(res[len(res)-1]), "=")[1])
-	lastPage := int(math.Ceil(float64(nPage) / 50 / 2) * 50)
+	lastPage, err := strconv.Atoi(strings.Split(string(res[len(res)-1]), "=")[1])
+	// lastPage = lastPage
+	oMidPage := math.Ceil(float64(lastPage) / 50 / 2) * 50
 	re = regexp.MustCompile(StockPattern)
 
-	oLastPage := lastPage
-	fmt.Println(lastPage)
+	// oMidPage := midPage
+	midPage := float64(lastPage)
+	// fmt.Printf("LAST PAGE: %g\n", midPage)
 	run := true
-	counter := 0
+	// counter := 0
+	pagesSeen := map[int]bool{}
 	for run {
-		counter++
-		url := fmt.Sprintf(Url, industry, oLastPage)
-		fmt.Printf("URL read : %s Truth value: %t\n", url, run)
+		count, ok := pagesSeen[int(oMidPage)]
+		if count && ok {
+			// fmt.Printf("Run truth: %g Seen: %v\n", oMidPage, pagesSeen)
+			// oMidPage -= 50
+			break
+		}
+		// counter++
+		url := fmt.Sprintf(Url, industry, int(oMidPage))
+		
+		// fmt.Printf("URL read : %s Truth value: %t\n", url, run)
 		resp, err := http.Get(url)
 		if err != nil {
 			
@@ -95,28 +105,32 @@ func getStockSymbolsByIndustry(industry string, wg *sync.WaitGroup) {
 
 		res := re.FindAll(b, 1)
 		// The case where you have to go higher
-		if len(res) > 0 && oLastPage >= lastPage {
-			oLastPage += 50
-		} else if len(res) == 0 && oLastPage >= lastPage {
-			fmt.Println("A")
-			run = false
-		}
+		if len(res) > 0 {
+			diff := math.Ceil((math.Abs(midPage - oMidPage) / 50 / 2)) * 50
+			pagesSeen[int(oMidPage)] = true
+			// fmt.Printf("higher: %g Seen: %v\n", diff, pagesSeen)
+			midPage = oMidPage
+			oMidPage += diff
+			
+		} 
 		// The case where you have to go lower
-		if len(res) == 0 && oLastPage <= lastPage {
-			oLastPage -= 50
-		} else if len(res) > 0 && oLastPage <= lastPage {
-			fmt.Println("B")
-			run = false
+		if len(res) == 0 {
+			diff := math.Ceil((math.Abs(midPage - oMidPage) / 50 / 2)) * 50 
+			pagesSeen[int(oMidPage)] = false
+			// fmt.Printf("lower: %g Seen: %v\n", diff, pagesSeen)
+			midPage = oMidPage
+			oMidPage -= diff
+			// pagesSeen[int(oMidPage)]++
 		}
 	}
-	fmt.Printf("Counter %d TRUE value: %t\n", counter, run)
-	concurrency := int(oLastPage / 50)
+	// fmt.Printf("Counter %d TRUE value: %t\n", counter, run)
+	concurrency := int(oMidPage / 50) + 1
 	var wgI sync.WaitGroup
 	wgI.Add(concurrency)
-	fmt.Printf("Concurrency %s is %d\n", industry, concurrency)
+	// fmt.Printf("Concurrency %s is %d\n", industry, concurrency)
  	for i := 0; i < concurrency; i++ {
  		pageNo := i * 50
- 		fmt.Printf("go routine %s pages: %d\n", industry, pageNo)
+ 		// fmt.Printf("go routine %s pages: %d\n", industry, pageNo)
  		go getStockSymbolsByPage(industry, pageNo, &wgI)
  	}
 
