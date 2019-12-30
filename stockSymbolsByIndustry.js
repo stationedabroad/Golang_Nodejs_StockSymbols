@@ -1,20 +1,110 @@
 "use strict"
 
 const request = require('request-promise')
+const http = require('http')
 const matchAll = require('match-all')
+const fs = require('fs')
 
-const URL = "http://bigcharts.marketwatch.com/industry/bigcharts-com/stocklist.asp?"
-const FinancialServices = "WSJMXUSFCL"
-const Agriculture = "WSJMXUSAGRI"
-const tickerUrl = URL + "Symb=" + FinancialServices + "&startingIndex="
-const re = "<td class=\"symb-col\">[A-Za-z0-9.]*</td>\\s*<td class=\"name-col\"><div>.*</div>";
+const Url = "http://bigcharts.marketwatch.com/industry/bigcharts-com/stocklist.asp?Symb="
+const StockPattern = "<td class=\"symb-col\">[A-Za-z0-9.]*</td>\\s*<td class=\"name-col\"><div>.*</div>"
+const PagePattern = "startingIndex=[0-9]*"
+const writeDirectory = "/home/sulman/Downloads/node-v12.14.0-linux-x64/bin/tmp/"
+const Industries = {
+		"Agricultre": "WSJMXUSAGRI",
+ 		"Automotive": "WSJMXUSAUTO",
+ 		"Basic Materials/Resources": "WSJMXUSBSC",
+ 		"Business/Consumer Services": "WSJMXUSCYC",
+ 		"Consumer Goods": "WSJMXUSNCY",
+ 		"Energy": "WSJMXUSENE",
+ 		"Financial Services": "WSJMXUSFCL",
+ 		"Health Care/Life Sciences": "WSJMXUSHCR",
+ 		"Industrial Goods": "WSJMXUSIDU",
+ 		"Leisure/Arts/Hospitality": "WSJMXUSLEAH",
+ 		"Media/Entertainment": "WSJMXUSMENT",
+ 		"Real Estate/Construction": "WSJMXUSRECN",
+ 		"Retail/Wholesale": "WSJMXUSRTWS",
+ 		"Technology": "WSJMXUSTEC",
+ 		"Telecommunication Services": "WSJMXUSTEL",
+ 		"Transportation/Logistics": "WSJMXUSTRSH",
+ 		"Utilities": "WSJMXUSUTI",
+ 	}
 
-function readIndustryTicker(url) {
+function getSyncRequest(url) {
+	let chunks_of_data = [];
+	return new Promise((res, rej) => {
+		http.get(url, response => {
+			response.on('data', (chunk) => {
+				// console.log("Called on chunk receieve ...", url)
+				chunks_of_data.push(chunk);
+			})
+
+			response.on('end', () => {
+				// console.log("Called on End ...")
+				let resp_body = Buffer.concat(chunks_of_data);
+				res(resp_body.toString());
+			});
+
+			response.on('error', (error) => {
+				rej(error);
+			});
+		});
+	});
+}
+
+function readTickerByIndustry(industry, url) {
+	let industryStart = new Date()
+	request.get(url + 0)
+		.then(async function(response) {
+			let mainPageResults = [...response.matchAll(PagePattern)];
+			let lastPage = mainPageResults[mainPageResults.length-1][0].split('=')[1]
+			let nextPage = Math.ceil(lastPage / 50 / 2) * 50
+			let prevPage = lastPage
+
+			let pagesSeen = new Map()
+			let run = true
+			let pageUrl = url + nextPage
+			var diff = 0
+			while(run) {
+				if(pagesSeen.has(nextPage) && pagesSeen.get(nextPage)) {
+					break
+				}
+				var httpPromise = getSyncRequest(url + nextPage);
+				var httpResponse = await httpPromise;
+				// var singlePageResult = [...response.matchAll(StockPattern)];
+
+				if([...httpResponse.matchAll(StockPattern)].length > 0) {
+					diff = Math.ceil((Math.abs(prevPage - nextPage) / 50 / 2)) * 50
+					pagesSeen.set(nextPage, true)
+					prevPage = nextPage
+					nextPage += diff
+				} else {
+					diff = Math.ceil((Math.abs(prevPage - nextPage) / 50 / 2)) * 50
+					pagesSeen.set(nextPage, false)
+					prevPage = nextPage
+					nextPage -= diff				
+				}					
+			}
+
+			let pageFuncs = new Array();	
+			let concurrency = nextPage / 50 + 1
+			for(let i = 0; i < concurrency; i++) {
+				var page = i * 50
+				pageFuncs.push(readTickerByPage(industry, url, page)) 
+			}
+
+			let promiseAllPages = Promise.all(pageFuncs)
+			promiseAllPages.then((pageResults) => {
+				console.info("Industry: %s Finished in: %dms",  industry, new Date() - industryStart)
+				return 
+			});
+		});
+	};
+
+function readTickerByPage(industry, url, page) {
 	let startRead = new Date()
-	return request.get(url)
+	request.get(url + page)
 		.then(response => {
-			let result = [...response.matchAll(re)];
-			// console.log("Done processing: ", url)
+			let result = [...response.matchAll(StockPattern)];
 			let res = result.map(entry => {
 				var startIdxCode = entry[0].indexOf(">") + 1
 				var endIdxCode = entry[0].indexOf("</td>")
@@ -25,25 +115,31 @@ function readIndustryTicker(url) {
 					"company_desc": entry[0].substring(startIdxDesc, endIdxDesc)
 				}
 			});
-			console.info("Execution of: %s\t entries: %d\t time elapsed: %dms", url, res.length, new Date() - startRead)
-			return res
+			let resJson = JSON.stringify(res, null, 4);
+			fs.writeFile(writeDirectory + industry + "_" + page + ".json", resJson, (err) => {
+				if(err) {
+					console.log("Could not write: %s with page: %d", industry, page )
+				}
+			});
+		console.log("Written page: %d for Industry: %s", page, industry)	
+		return 	
 		});
 };
 
 let start = new Date()
 var stockFuncs = new Array()
-for(let i = 0; i <= 4400; i += 50) {
-	var pageTickerUrl =  tickerUrl + i
-	stockFuncs.push(readIndustryTicker(pageTickerUrl))
+for(const industry in Industries) {
+	var pageTickerUrl =  Url + Industries[industry] + "&startingIndex="
+	stockFuncs.push(readTickerByIndustry(Industries[industry], pageTickerUrl))
 }
 
-console.log("Sent jobs ...")
+console.log("Sent %d jobs ...", stockFuncs.length)
 
 var promiseAllStock = Promise.all(stockFuncs)
 promiseAllStock.then(function(results) {
 	console.info("Total Execution time: %dms", new Date() - start)
-	results.forEach(function(tab) {
-		console.info("\n", tab.length)
-	});
+	// results.forEach(function(tab) {
+		// console.info("\n", tab.length)
 });
+// });
 
