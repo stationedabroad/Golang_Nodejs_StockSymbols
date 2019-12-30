@@ -53,6 +53,7 @@ function getSyncRequest(url) {
 
 function readTickerByIndustry(industry, url) {
 	let industryStart = new Date()
+	return new Promise((resolve, reject) => {
 	request.get(url + 0)
 		.then(async function(response) {
 			let mainPageResults = [...response.matchAll(PagePattern)];
@@ -94,11 +95,12 @@ function readTickerByIndustry(industry, url) {
 
 			let promiseAllPages = Promise.all(pageFuncs)
 			promiseAllPages.then((pageResults) => {
-				console.info("Industry: %s Finished in: %dms",  industry, new Date() - industryStart)
-				return 
+				console.info("Industry: %s\t Finished in: %dms",  industry, new Date() - industryStart)
+				resolve();
 			});
 		});
-	};
+	});
+};
 
 function readTickerByPage(industry, url, page) {
 	let startRead = new Date()
@@ -121,7 +123,7 @@ function readTickerByPage(industry, url, page) {
 					console.log("Could not write: %s with page: %d", industry, page )
 				}
 			});
-		console.log("Written page: %d for Industry: %s", page, industry)	
+		// console.log("Written page: %d for Industry: %s", page, industry)	
 		return 	
 		});
 };
@@ -137,9 +139,7 @@ console.log("Sent %d jobs ...", stockFuncs.length)
 
 var promiseAllStock = Promise.all(stockFuncs)
 promiseAllStock.then(function(results) {
-	console.info("Total Execution time: %dms", new Date() - start)
-	// results.forEach(function(tab) {
-		// console.info("\n", tab.length)
+	console.info("\nTotal Execution time: %dms", new Date() - start)
 });
-// });
+
 
