@@ -34,12 +34,10 @@ function getSyncRequest(url) {
 	return new Promise((res, rej) => {
 		http.get(url, response => {
 			response.on('data', (chunk) => {
-				// console.log("Called on chunk receieve ...", url)
 				chunks_of_data.push(chunk);
 			})
 
 			response.on('end', () => {
-				// console.log("Called on End ...")
 				let resp_body = Buffer.concat(chunks_of_data);
 				res(resp_body.toString());
 			});
@@ -71,7 +69,6 @@ function readTickerByIndustry(industry, url) {
 				}
 				var httpPromise = getSyncRequest(url + nextPage);
 				var httpResponse = await httpPromise;
-				// var singlePageResult = [...response.matchAll(StockPattern)];
 
 				if([...httpResponse.matchAll(StockPattern)].length > 0) {
 					diff = Math.ceil((Math.abs(prevPage - nextPage) / 50 / 2)) * 50
@@ -104,6 +101,7 @@ function readTickerByIndustry(industry, url) {
 
 function readTickerByPage(industry, url, page) {
 	let startRead = new Date()
+	return new Promise((resolve, reject) => { 
 	request.get(url + page)
 		.then(response => {
 			let result = [...response.matchAll(StockPattern)];
@@ -121,14 +119,15 @@ function readTickerByPage(industry, url, page) {
 			fs.writeFile(writeDirectory + industry + "_" + page + ".json", resJson, (err) => {
 				if(err) {
 					console.log("Could not write: %s with page: %d", industry, page )
+					reject();
 				}
 			});
-		// console.log("Written page: %d for Industry: %s", page, industry)	
-		return 	
+		resolve();
 		});
+	});
 };
 
-let start = new Date()
+let hrstart = process.hrtime()
 var stockFuncs = new Array()
 for(const industry in Industries) {
 	var pageTickerUrl =  Url + Industries[industry] + "&startingIndex="
@@ -139,7 +138,8 @@ console.log("Sent %d jobs ...", stockFuncs.length)
 
 var promiseAllStock = Promise.all(stockFuncs)
 promiseAllStock.then(function(results) {
-	console.info("\nTotal Execution time: %dms", new Date() - start)
+	let hrend = process.hrtime(hrstart)
+	console.info("\nTotal execution time: %ds %dms", hrend[0], hrend[1] / 1000000)
 });
 
 

@@ -13,6 +13,11 @@ import (
 	
 	"os"
 	"io/ioutil"
+
+	"runtime/pprof"
+	"flag"
+	"log"
+	"runtime"
 )
 
 type StockSymbol struct{
@@ -20,14 +25,14 @@ type StockSymbol struct{
 	Description string `json:"company_name"`
 }
 
- const (
+const (
  	Url string = "http://bigcharts.marketwatch.com/industry/bigcharts-com/stocklist.asp?Symb=%s&startingIndex=%d"
  	StockPattern string = "<td class=\"symb-col\">[A-Za-z0-9.]*</td>\\s*<td class=\"name-col\"><div>.*</div>"
  	PagePattern string = "startingIndex=[0-9]*"
  )
 
-  var Industries = map[string]string{
- 		"Agricultre": "WSJMXUSAGRI",
+var Industries = map[string]string{
+ 		"Agriculture": "WSJMXUSAGRI",
  		"Automotive": "WSJMXUSAUTO",
  		"Basic Materials/Resources": "WSJMXUSBSC",
  		"Business/Consumer Services": "WSJMXUSCYC",
@@ -46,11 +51,14 @@ type StockSymbol struct{
  		"Utilities": "WSJMXUSUTI",
  	}
 
+var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to `file`")
+var memprofile = flag.String("memprofile", "", "write memory profile to `file`")
+
 func getStockSymbolsByIndustry(industry string, wg *sync.WaitGroup) {
 	start := time.Now()
 	defer func() {
 		elapsed := time.Since(start)
- 		fmt.Printf("Industry: %s finished in: %s\n", industry, elapsed)
+ 		fmt.Printf("Industry: %s\t finished in: %s\n", industry, elapsed)
  		wg.Done()
 	}()
 
@@ -148,6 +156,20 @@ func getStockSymbolsByPage(industry string, page int, wgI *sync.WaitGroup) {
 }
 
 func main() {
+	flag.Parse()
+	if *cpuprofile != "" {
+		f, err := os.Create(*cpuprofile)
+		if err != nil {
+			log.Fatal("could bot create cpu profile: ", err)
+		}
+		defer f.Close()
+		if err := pprof.StartCPUProfile(f); err != nil {
+		log.Fatal("could not start CPU profile: ", err)
+		}
+	}
+	
+	defer pprof.StopCPUProfile()
+
  	mainStart := time.Now()
 	
 	defer func() {
@@ -163,4 +185,16 @@ func main() {
  	}
 
  	wg.Wait()
+
+ 	if *memprofile != "" {
+ 		f, err := os.Create(*memprofile)
+ 		if err != nil {
+ 			log.Fatal("could not create memory profile: ", err)
+ 		}
+ 		defer f.Close()
+ 		runtime.GC()
+ 		if err := pprof.WriteHeapProfile(f); err != nil {
+ 			log.Fatal("could not write memory profile: ", err)
+ 		}
+ 	}
  }
