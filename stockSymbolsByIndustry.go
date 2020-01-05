@@ -62,7 +62,6 @@ func getStockSymbolsByIndustry(industry string, wg *sync.WaitGroup) {
  		wg.Done()
 	}()
 
-	// Decide the number of concurrent processes
 	urlMain := fmt.Sprintf(Url, industry, 0)
 	re := regexp.MustCompile(PagePattern)
 	resp, err := http.Get(urlMain)
@@ -75,21 +74,21 @@ func getStockSymbolsByIndustry(industry string, wg *sync.WaitGroup) {
 	}
 	res := re.FindAll(b, -1)
 	lastPage, err := strconv.Atoi(strings.Split(string(res[len(res)-1]), "=")[1])
-	oMidPage := math.Ceil(float64(lastPage) / 50 / 2) * 50
-	midPage := float64(lastPage)
+	nextPage := math.Ceil(float64(lastPage) / 50 / 2) * 50
+	prevPage := float64(lastPage)
 	re = regexp.MustCompile(StockPattern)
 	run := true
 	pagesSeen := map[int]bool{}
 	for run {
-		count, ok := pagesSeen[int(oMidPage)]
+		count, ok := pagesSeen[int(nextPage)]
 		if count && ok {
 			break
 		}
 
-		url := fmt.Sprintf(Url, industry, int(oMidPage))
+		url := fmt.Sprintf(Url, industry, int(nextPage))
 		resp, err := http.Get(url)
 		if err != nil {
-			
+			// error
 		}
 		b, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
@@ -97,23 +96,21 @@ func getStockSymbolsByIndustry(industry string, wg *sync.WaitGroup) {
 		}
 
 		res := re.FindAll(b, 1)
-		// The case where you have to go higher
 		if len(res) > 0 {
-			diff := math.Ceil((math.Abs(midPage - oMidPage) / 50 / 2)) * 50
-			pagesSeen[int(oMidPage)] = true
-			midPage = oMidPage
-			oMidPage += diff
+			diff := math.Ceil((math.Abs(prevPage - nextPage) / 50 / 2)) * 50
+			pagesSeen[int(nextPage)] = true
+			prevPage = nextPage
+			nextPage += diff
 			
 		} 
-		// The case where you have to go lower
 		if len(res) == 0 {
-			diff := math.Ceil((math.Abs(midPage - oMidPage) / 50 / 2)) * 50 
-			pagesSeen[int(oMidPage)] = false
-			midPage = oMidPage
-			oMidPage -= diff
+			diff := math.Ceil((math.Abs(prevPage - nextPage) / 50 / 2)) * 50 
+			pagesSeen[int(nextPage)] = false
+			prevPage = nextPage
+			nextPage -= diff
 		}
 	}
-	concurrency := int(oMidPage / 50) + 1
+	concurrency := int(nextPage / 50) + 1
 	var wgI sync.WaitGroup
 	wgI.Add(concurrency)
  	for i := 0; i < concurrency; i++ {

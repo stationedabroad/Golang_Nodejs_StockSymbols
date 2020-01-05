@@ -136,7 +136,7 @@ for(const industry in Industries) {
 
 console.log("Sent %d jobs ...", stockFuncs.length)
 
-var promiseAllStock = Promise.all(stockFuncs)
+let promiseAllStock = Promise.all(stockFuncs)
 promiseAllStock.then(function(results) {
 	let hrend = process.hrtime(hrstart)
 	console.info("\nTotal execution time: %ds %dms", hrend[0], hrend[1] / 1000000)
